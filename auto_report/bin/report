@@ -1,0 +1,82 @@
+#!/usr/bin/python
+# coding=utf-8
+"""
+@author: qyke
+执行收集
+"""
+
+from auto_report import config
+from auto_report.sonar_data_aly import SonarHandel
+from auto_report.jenkins_data_aly import JenkinsHandel
+from auto_report.jira_data_aly import HandleJira
+from auto_report.git_data_aly import GitHandle
+from auto_report.commit_wiki import CommitWiki
+from auto_report.cover_report import CoverReport
+from auto_report.bug_rate_report import BugRateReport
+from auto_report.project_bug_rate_report import ProjectBugRateReport
+
+from auto_report.email_report import EamilHandel
+
+
+class Report:
+    def __init__(self, jenkins_info, sonar_info, wiki_info, jira_info, git_info, email_info):
+        """
+        :param jenkins_info: tuple (host, (auth_n,auth_p))
+        :param sonar_info: tuple (host, sonar_token)
+        :param wiki_info: tuple (host, (auth_n,auth_p))
+        :param email_info: tuple(host, user, pwd)
+        """
+        self.jenkins = JenkinsHandel(jenkins_info[0], jenkins_info[1])
+        self.sonar = SonarHandel(sonar_info[0], sonar_info[1])
+        self.wiki = CommitWiki(wiki_info[0], wiki_info[1], wiki_info[2])
+        self.jira = HandleJira(jira_info[0], jira_info[1], jira_info[2])
+        self.git = GitHandle(git_info[0], git_info[1])
+        self.report_body = ''
+        # self.email = EamilHandel(email_info[0], email_info[1], email_info[2])
+
+    def run_cover_report(self, project_report):
+        cover = CoverReport(self.jenkins, self.sonar, project_report)
+        cover.run()
+        cover_body = cover.commit_report()
+        self.report_body += cover_body
+
+    def run_bug_rate(self, git_project_list):
+        bug = ProjectBugRateReport(self.git, self.jira, git_project_list, 14)
+        bug.run()
+        bug_body = bug.commit_report()
+        self.report_body += bug_body
+        bug_body = bug.commit_project_report()
+        self.report_body += bug_body
+
+    def commit_report(self):
+        self.wiki.commit(self.report_body)
+
+    def clear_report(self):
+        self.wiki.clear(30*6)
+
+
+if __name__ == "__main__":
+
+    # info
+    wiki_info = (config.wiki_host, config.wiki_auth, config.wiki_ancestors)
+
+    sonar_info = (config.sonar_host, config.sonar_token)
+
+    jenkins_info = (config.jenkins_host, config.jenkins_auth)
+
+    email_info = (config.email_host, config.email_user, config.email_pwd)
+
+    jira_info = (config.jira_url, config.jira_name, config.jira_pwd)
+
+    git_info = (config.git_host, config.git_token)
+
+    # run report
+    r = Report(jenkins_info, sonar_info, wiki_info, jira_info, git_info, email_info)
+
+    r.run_cover_report(config.project_map)
+
+    r.run_bug_rate(['ADN'])
+
+    r.commit_report()
+
+    r.clear_report()
